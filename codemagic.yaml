@@ -1,50 +1,38 @@
-name: iOS Build
+workflows:
+  ios-unsigned-workflow:
+    name: iOS Unsigned Build
+    instance_type: mac_mini_m2
+    max_build_duration: 60
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
 
-jobs:
-  build-ios:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Flutter doctor
-        run: flutter doctor -v
-
-      - name: Flutter clean
-        run: flutter clean
-
+    scripts:
       - name: Get Flutter packages
-        run: flutter pub get
+        script: |
+          flutter clean
+          flutter pub get
 
-      - name: Check Info.plist
-        run: |
-          echo "===== Info.plist first lines ====="
-          head -20 ios/Runner/Info.plist
-          echo "===== Info.plist validation ====="
-          plutil -lint ios/Runner/Info.plist
-          plutil -p ios/Runner/Info.plist
-
-      - name: Install iOS pods
-        run: |
+      - name: Install CocoaPods
+        script: |
           cd ios
-          rm -rf Pods
-          rm -f Podfile.lock
-          rm -rf .symlinks
-          pod deintegrate || true
-          pod install --repo-update
+          pod install
           cd ..
 
-      - name: Build iOS no codesign
-        run: flutter build ios --release --no-codesign
+      - name: Build iOS without codesign
+        script: |
+          flutter build ios --release --no-codesign
+
+      - name: Create unsigned IPA
+        script: |
+          mkdir -p build/ios/ipa/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -r Runner-unsigned.ipa Payload
+
+    artifacts:
+      - build/ios/ipa/Runner-unsigned.ipa
+      - build/ios/iphoneos/Runner.app
+      - /tmp/xcodebuild_logs/*.log
