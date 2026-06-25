@@ -1,0 +1,18 @@
+iOS minimum version fixed to 15.0
+
+Changed files:
+- ios/Podfile
+- ios/Runner.xcodeproj/project.pbxproj
+- ios/Flutter/AppFrameworkInfo.plist
+
+After downloading this project, run on Mac or CI:
+
+flutter clean
+flutter pub get
+cd ios
+pod repo update
+pod install
+cd ..
+flutter build ipa --release
+
+Note: The app will install only on iPhone devices running iOS 15 or newer.

@@ -1,0 +1,31 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "viyafaari-town",
+          "appId": "1:266406107966:android:8c3852606f24a5d04f2a6f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "viyafaari-town",
+          "configurations": {
+            "android": "1:266406107966:android:8c3852606f24a5d04f2a6f",
+            "ios": "1:266406107966:ios:4eed267a072553f34f2a6f",
+            "macos": "1:266406107966:ios:4eed267a072553f34f2a6f",
+            "web": "1:266406107966:web:5c4bedb662b9c0304f2a6f",
+            "windows": "1:266406107966:web:da9d13a451e3534e4f2a6f"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

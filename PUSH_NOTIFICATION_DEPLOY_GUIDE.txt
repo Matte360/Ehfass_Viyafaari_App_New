@@ -1,0 +1,18 @@
+Viyafaari Town push notification setup
+
+1. Run:
+   flutter pub get
+
+2. Deploy safe Firestore rules:
+   firebase deploy --only firestore:rules --project viyafaari-town
+
+3. For real phone push notifications, deploy Cloud Functions:
+   cd functions
+   npm install
+   cd ..
+   firebase deploy --only functions --project viyafaari-town
+
+Important:
+- The in-app notification bell works after Firestore rules are deployed.
+- Real Android/iPhone push notifications need Firebase Cloud Functions deployed.
+- Firebase Functions may ask you to upgrade Firebase project billing plan.

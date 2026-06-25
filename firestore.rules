@@ -1,0 +1,636 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserExists() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function currentRole() {
+      return currentUserExists()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : '';
+    }
+
+    function isAdmin() {
+      return currentRole() == 'admin';
+    }
+
+    function isClient() {
+      return currentRole() == 'client';
+    }
+
+    function businessExists(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId));
+    }
+
+    function businessData(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId)).data;
+    }
+
+    function ownsBusiness(businessId) {
+      return signedIn()
+        && businessExists(businessId)
+        && businessData(businessId).businessUserId == request.auth.uid;
+    }
+
+    function catalogItemExists(itemId) {
+      return exists(/databases/$(database)/documents/catalog_items/$(itemId));
+    }
+
+    function catalogItemData(itemId) {
+      return get(/databases/$(database)/documents/catalog_items/$(itemId)).data;
+    }
+
+    function orderExists(orderId) {
+      return exists(/databases/$(database)/documents/orders/$(orderId));
+    }
+
+    function orderData(orderId) {
+      return get(/databases/$(database)/documents/orders/$(orderId)).data;
+    }
+
+    function quotationExists(quotationId) {
+      return exists(/databases/$(database)/documents/quotation_requests/$(quotationId));
+    }
+
+    function quotationData(quotationId) {
+      return get(/databases/$(database)/documents/quotation_requests/$(quotationId)).data;
+    }
+
+    function chatThreadExists(threadId) {
+      return exists(/databases/$(database)/documents/chat_threads/$(threadId));
+    }
+
+    function chatThreadData(threadId) {
+      return get(/databases/$(database)/documents/chat_threads/$(threadId)).data;
+    }
+
+    match /usernames/{username} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email;
+
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    match /users/{userId} {
+      allow create: if (
+          signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.uid == userId
+          && request.resource.data.role == 'client'
+          && request.resource.data.email == request.auth.token.email
+        ) || (
+          isAdmin()
+          && request.resource.data.uid == userId
+          && request.resource.data.role == 'business'
+          && request.resource.data.businessId is string
+          && request.resource.data.businessName is string
+        );
+
+      allow get: if signedIn()
+        && (request.auth.uid == userId || isAdmin());
+
+      allow list: if isAdmin();
+
+      allow update: if isAdmin() || (
+        signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName',
+          'username',
+          'usernameLower',
+          'phone',
+          'profileImageUrl',
+          'updatedAt',
+          'fcmToken',
+          'fcmTokens',
+          'notificationPermission',
+          'notificationUpdatedAt',
+          'lastSeenAt'
+        ])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /businesses/{businessId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.reviewedBy == ''
+        && request.resource.data.businessUserId == '';
+
+      allow read: if signedIn() && (
+        resource.data.status == 'approved'
+        || resource.data.ownerId == request.auth.uid
+        || resource.data.businessUserId == request.auth.uid
+        || isAdmin()
+      );
+
+      allow update: if isAdmin() || (
+        resource.data.businessUserId == request.auth.uid
+        && request.resource.data.businessUserId == resource.data.businessUserId
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'bankName',
+          'accountName',
+          'accountNumber',
+          'paymentInstructions',
+          'paymentUpdatedAt',
+          'island',
+          'islandLower',
+          'latitude',
+          'longitude',
+          'mapUrl',
+          'locationUpdatedAt',
+          'openingEnabled',
+          'openingTime',
+          'closingTime',
+          'openDays',
+          'temporarilyClosed',
+          'openingHoursUpdatedAt',
+          'couponEnabled',
+          'couponMinimumSpendMvr',
+          'couponRewardMvr',
+          'couponTitle',
+          'couponTerms',
+          'couponUpdatedAt'
+        ])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /catalog_items/{itemId} {
+      allow read: if signedIn() && (
+        resource.data.active == true
+        || ownsBusiness(resource.data.businessId)
+        || isAdmin()
+      );
+
+      allow create: if signedIn()
+        && ownsBusiness(request.resource.data.businessId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.priceMvr is number
+        && request.resource.data.priceMvr > 0
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.active == true
+        && request.resource.data.itemType in ['product', 'service'];
+
+      allow update: if (isAdmin() || ownsBusiness(resource.data.businessId))
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.priceMvr is number
+        && request.resource.data.priceMvr > 0
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.itemType in ['product', 'service'];
+
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow create: if signedIn()
+        && isClient()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status == 'pending_verification'
+        && request.resource.data.paymentMethod == 'bank_transfer'
+        && request.resource.data.receiptPath is string
+        && request.resource.data.receiptPath.size() > 0
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && catalogItemExists(request.resource.data.itemId)
+        && catalogItemData(request.resource.data.itemId).active == true
+        && request.resource.data.businessId
+          == catalogItemData(request.resource.data.itemId).businessId
+        && request.resource.data.itemName
+          == catalogItemData(request.resource.data.itemId).name
+        && request.resource.data.unitPriceMvr
+          == catalogItemData(request.resource.data.itemId).priceMvr
+        && request.resource.data.quantity
+          <= catalogItemData(request.resource.data.itemId).quantity
+        && request.resource.data.totalMvr is number
+        && request.resource.data.totalMvr >= 0
+        && request.resource.data.totalMvr
+          <= catalogItemData(request.resource.data.itemId).priceMvr
+            * request.resource.data.quantity;
+
+      allow read: if signedIn() && (
+        resource.data.clientId == request.auth.uid
+        || ownsBusiness(resource.data.businessId)
+        || isAdmin()
+      );
+
+      allow update: if (isAdmin() || ownsBusiness(resource.data.businessId))
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.itemId == resource.data.itemId
+        && request.resource.data.quantity == resource.data.quantity
+        && request.resource.data.totalMvr == resource.data.totalMvr
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'verifiedBy',
+          'verifiedAt',
+          'rejectionReason',
+          'updatedAt',
+          'statusHistory'
+        ])
+        && (
+          (
+            resource.data.status == 'pending_verification'
+            && request.resource.data.status in ['verified', 'rejected']
+          ) || (
+            resource.data.status in ['verified', 'processing', 'ready', 'delivered']
+            && request.resource.data.status in ['processing', 'ready', 'delivered', 'completed']
+          )
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    match /quotation_requests/{requestId} {
+      allow create: if signedIn()
+        && isClient()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.businessId is string
+        && businessExists(request.resource.data.businessId)
+        && businessData(request.resource.data.businessId).status == 'approved'
+        && request.resource.data.businessName
+          == businessData(request.resource.data.businessId).businessName
+        && request.resource.data.lines is list
+        && request.resource.data.lines.size() > 0
+        && request.resource.data.requestedTotalMvr is number
+        && request.resource.data.requestedTotalMvr > 0;
+
+      allow read: if signedIn() && (
+        resource.data.clientId == request.auth.uid
+        || ownsBusiness(resource.data.businessId)
+        || isAdmin()
+      );
+
+      allow update: if signedIn() && (
+        (
+          (isAdmin() || ownsBusiness(resource.data.businessId))
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['quoted', 'rejected']
+          && request.resource.data.businessId == resource.data.businessId
+          && request.resource.data.businessName == resource.data.businessName
+          && request.resource.data.clientId == resource.data.clientId
+          && request.resource.data.lines == resource.data.lines
+          && request.resource.data.requestedTotalMvr == resource.data.requestedTotalMvr
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'quotationNumber',
+            'quotationTotalMvr',
+            'deliveryFeeMvr',
+            'discountMvr',
+            'finalTotalMvr',
+            'sellerNote',
+            'quotationAttachmentUrl',
+            'quotationAttachmentPath',
+            'rejectionReason',
+            'quotedBy',
+            'quotedAt',
+            'updatedAt',
+            'statusHistory'
+          ])
+        ) || (
+          resource.data.clientId == request.auth.uid
+          && resource.data.status == 'quoted'
+          && request.resource.data.status in ['accepted', 'declined']
+          && request.resource.data.businessId == resource.data.businessId
+          && request.resource.data.businessName == resource.data.businessName
+          && request.resource.data.clientId == resource.data.clientId
+          && request.resource.data.lines == resource.data.lines
+          && request.resource.data.requestedTotalMvr == resource.data.requestedTotalMvr
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'acceptedAt',
+            'declinedAt',
+            'updatedAt',
+            'statusHistory'
+          ])
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /chat_threads/{threadId} {
+      // Chat is available only between the client, the business owner and admin.
+      // This block also allows fixing older chat threads that were created before
+      // businessUserId was saved correctly.
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.businessId is string
+        && businessExists(request.resource.data.businessId)
+        && businessData(request.resource.data.businessId).status == 'approved'
+        && request.resource.data.diff({}).affectedKeys().hasOnly([
+          'businessId',
+          'businessName',
+          'businessUserId',
+          'clientId',
+          'clientName',
+          'clientEmail',
+          'clientPhone',
+          'itemId',
+          'itemName',
+          'updatedAt',
+          'lastMessage',
+          'lastSenderId',
+          'unreadForClient',
+          'unreadForBusiness',
+          'createdAt',
+          'lastMessageAt'
+        ]);
+
+      allow read: if signedIn() && (
+        resource.data.clientId == request.auth.uid
+        || resource.data.businessUserId == request.auth.uid
+        || ownsBusiness(resource.data.businessId)
+        || isAdmin()
+      );
+
+      allow update: if signedIn()
+        && resource.data.businessId is string
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.clientId == resource.data.clientId
+        && (
+          resource.data.clientId == request.auth.uid
+          || request.resource.data.clientId == request.auth.uid
+          || resource.data.businessUserId == request.auth.uid
+          || request.resource.data.businessUserId == request.auth.uid
+          || ownsBusiness(resource.data.businessId)
+          || isAdmin()
+        )
+        && (
+          request.resource.data.businessUserId == resource.data.businessUserId
+          || request.resource.data.businessUserId == businessData(resource.data.businessId).businessUserId
+          || request.resource.data.businessUserId == ''
+        )
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'businessName',
+          'businessUserId',
+          'clientName',
+          'clientEmail',
+          'clientPhone',
+          'itemId',
+          'itemName',
+          'updatedAt',
+          'lastMessage',
+          'lastSenderId',
+          'lastMessageAt',
+          'unreadForClient',
+          'unreadForBusiness'
+        ]);
+
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if signedIn() && chatThreadExists(threadId) && (
+          chatThreadData(threadId).clientId == request.auth.uid
+          || chatThreadData(threadId).businessUserId == request.auth.uid
+          || ownsBusiness(chatThreadData(threadId).businessId)
+          || isAdmin()
+        );
+
+        allow create: if signedIn()
+          && chatThreadExists(threadId)
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0
+          && request.resource.data.message.size() <= 2000
+          && request.resource.data.diff({}).affectedKeys().hasOnly([
+            'senderId',
+            'senderName',
+            'senderRole',
+            'message',
+            'createdAt'
+          ])
+          && (
+            chatThreadData(threadId).clientId == request.auth.uid
+            || chatThreadData(threadId).businessUserId == request.auth.uid
+            || ownsBusiness(chatThreadData(threadId).businessId)
+            || isAdmin()
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /notifications/{notificationId} {
+      allow create: if signedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.userId is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.type in [
+          'order_new',
+          'order_status',
+          'quote_new',
+          'quote_status',
+          'chat_message',
+          'review_new',
+          'coupon_new'
+        ]
+        && request.resource.data.read == false;
+
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'read',
+          'readAt'
+        ]);
+
+      allow delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow create, update: if signedIn()
+        && isClient()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.orderId is string
+        && orderExists(request.resource.data.orderId)
+        && orderData(request.resource.data.orderId).clientId == request.auth.uid
+        && orderData(request.resource.data.orderId).businessId
+          == request.resource.data.businessId
+        && orderData(request.resource.data.orderId).status in [
+          'verified',
+          'processing',
+          'ready',
+          'delivered',
+          'completed'
+        ];
+
+      allow read: if signedIn() && (
+        resource.data.active == true
+        || resource.data.clientId == request.auth.uid
+        || ownsBusiness(resource.data.businessId)
+        || isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /coupons/{couponId} {
+      allow create: if signedIn()
+        && isClient()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.orderId is string
+        && orderExists(request.resource.data.orderId)
+        && orderData(request.resource.data.orderId).clientId == request.auth.uid
+        && orderData(request.resource.data.orderId).businessId
+          == request.resource.data.businessId
+        && businessExists(request.resource.data.businessId)
+        && businessData(request.resource.data.businessId).couponEnabled == true
+        && request.resource.data.businessName
+          == businessData(request.resource.data.businessId).businessName
+        && request.resource.data.minimumSpendMvr
+          == businessData(request.resource.data.businessId).couponMinimumSpendMvr
+        && request.resource.data.rewardMvr
+          == businessData(request.resource.data.businessId).couponRewardMvr
+        && orderData(request.resource.data.orderId).status in [
+          'verified',
+          'processing',
+          'ready',
+          'delivered',
+          'completed'
+        ]
+        && request.resource.data.purchaseTotalMvr is number
+        && request.resource.data.purchaseTotalMvr == orderData(request.resource.data.orderId).totalMvr
+        && request.resource.data.minimumSpendMvr is number
+        && request.resource.data.purchaseTotalMvr >= request.resource.data.minimumSpendMvr
+        && request.resource.data.redeemed == false;
+
+      allow get, list: if signedIn() && (
+        resource.data.clientId == request.auth.uid
+        || ownsBusiness(resource.data.businessId)
+        || isAdmin()
+      );
+
+      allow update: if (isAdmin() || ownsBusiness(resource.data.businessId))
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.orderId == resource.data.orderId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'redeemed',
+          'redeemedAt',
+          'updatedAt'
+        ]);
+
+      allow delete: if isAdmin();
+    }
+
+
+
+    match /cart_items/{cartItemId} {
+      allow create: if signedIn()
+        && isClient()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.itemId is string
+        && catalogItemExists(request.resource.data.itemId)
+        && catalogItemData(request.resource.data.itemId).itemType == 'product'
+        && catalogItemData(request.resource.data.itemId).active == true
+        && request.resource.data.businessId
+          == catalogItemData(request.resource.data.itemId).businessId
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.quantity
+          <= catalogItemData(request.resource.data.itemId).quantity;
+
+      allow read: if signedIn() && resource.data.clientId == request.auth.uid;
+
+      allow update: if signedIn()
+        && resource.data.clientId == request.auth.uid
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.itemId == resource.data.itemId
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.quantity <= resource.data.availableQuantity
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'quantity',
+          'updatedAt'
+        ]);
+
+      allow delete: if signedIn() && resource.data.clientId == request.auth.uid;
+    }
+
+    match /promotion_requests/{requestId} {
+      allow create: if signedIn()
+        && ownsBusiness(request.resource.data.businessId)
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.plan in [
+          'featured_shop',
+          'sponsored_shop',
+          'verified_badge'
+        ];
+
+      allow read: if signedIn() && (
+        ownsBusiness(resource.data.businessId) || isAdmin()
+      );
+
+      allow update: if isAdmin()
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.sellerId == resource.data.sellerId
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'rejectionReason',
+          'reviewedAt',
+          'reviewedBy'
+        ]);
+
+      allow delete: if isAdmin();
+    }
+
+    match /home_advertisements/{advertisementId} {
+      allow read: if signedIn() && (
+        resource.data.isActive == true || isAdmin()
+      );
+
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /advertisement_requests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow read: if signedIn() && (
+        resource.data.ownerId == request.auth.uid || isAdmin()
+      );
+
+      allow update, delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,10 @@
+Open:
+android/app/src/main/AndroidManifest.xml
+
+Add these lines below the opening <manifest ...> line and above <application ...>:
+
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+No additional Android permission is normally required for selecting an image
+with the current image_picker package.

@@ -1,0 +1,10 @@
+Open:
+ios/Runner/Info.plist
+
+Add these lines before the final </dict> tag:
+
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>Viyafaari Town uses your location to show nearby approved businesses.</string>
+
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Viyafaari Town needs photo access to upload a business logo or image.</string>

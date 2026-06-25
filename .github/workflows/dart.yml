@@ -1,0 +1,51 @@
+name: iOS Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Get Flutter packages
+        run: flutter pub get
+
+      - name: Check Info.plist
+        run: |
+          echo "===== FIRST LINES ====="
+          head -20 ios/Runner/Info.plist
+          echo "===== LAST LINES ====="
+          tail -20 ios/Runner/Info.plist
+          echo "===== VALIDATION ====="
+          plutil -lint ios/Runner/Info.plist
+          plutil -p ios/Runner/Info.plist
+
+      - name: Clean iOS
+        run: |
+          flutter clean
+          flutter pub get
+          cd ios
+          rm -rf Pods
+          rm -f Podfile.lock
+          rm -rf .symlinks
+          pod deintegrate || true
+          pod install --repo-update
+          cd ..
+
+      - name: Build iOS no codesign
+        run: flutter build ios --release --no-codesign

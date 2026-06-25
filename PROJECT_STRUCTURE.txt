@@ -1,0 +1,23 @@
+lib/
+├── firebase_options.dart          KEEP YOUR EXISTING GENERATED FILE
+├── main.dart
+├── data/
+│   └── maldives_islands.dart
+├── models/
+│   ├── advertisement_request.dart
+│   ├── app_language.dart
+│   ├── app_user.dart
+│   └── business.dart
+├── screens/
+│   ├── add_business_page.dart
+│   ├── admin_page.dart
+│   ├── advertisement_request_page.dart
+│   ├── client_home_page.dart
+│   ├── login_page.dart
+│   ├── my_submissions_page.dart
+│   ├── register_page.dart
+│   └── settings_page.dart
+└── services/
+    ├── advertisement_service.dart
+    ├── auth_service.dart
+    └── business_service.dart
